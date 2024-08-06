@@ -1,0 +1,63 @@
+#!/bin/sh -e
+##:
+#h: Usage: lanwan LAN WAN
+#h:
+#h: Determine whether you are in home (LAN) or outside (WAN). To determine
+#h: this checks whether the default gateway has a specific MAC address.
+#h:
+#h: If you host services in your home network, you can use this script to
+#h: determine whether you are at home or outside.
+#h:
+#h: When in home then LAN is printed, otherwise WAN is printed.
+#h:
+#h: Environment variables: LANWAN_MAC
+#h: Configuration: /etc/lanwan.conf
+##:
+lanwan() {
+    local gw_ip gw_mac rest resn
+    
+    ## Get default gateway IP address.
+    gw_ip="$(ip route show | awk '/default/ {print $3}')"
+    if test ! -n "${gw_ip}"; then
+        echo "error: No default gateway found." >&2
+        return 1
+    fi
+    
+    ## Get default gateway MAC address.
+    gw_mac="$(arp | awk -v gw="${gw_ip}" 'gw == $1 {print $3}')"
+    if test ! -n "${gw_mac}"; then
+        echo "error: No MAC address found for ${gw_ip}." >&2
+        return 1
+    fi
+    
+    ## Source configuration file.
+    if test -r /etc/lanwan.conf; then
+        . /etc/lanwan.conf
+    fi
+
+    ## Check whether LANWAN_MAC is set.
+    if test ! -n "${LANWAN_MAC}"; then
+        echo "error: Please set LANWAN_MAC in /etc/lanwan.conf" >&2
+        echo "error: The default gateway MAC address is: ${gw_mac}" >&2
+        return 1
+    fi
+    
+    ## Compare the MAC address.
+    if test "${gw_mac}" = "${LANWAN_MAC}"; then
+        rest="$1" resn=0
+    else
+        rest="$2" resn=1
+    fi
+    if test -n "${rest}"; then
+        echo "${rest}"
+    fi
+    return ${resn}
+}
+
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"lanwan"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         lanwan "$@"; exit 0;;
+    esac
+fi
